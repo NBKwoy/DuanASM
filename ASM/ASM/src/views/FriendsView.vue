@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { RouterLink } from 'vue-router';
 import { store } from '../store';
 
 // Lấy danh sách bạn bè

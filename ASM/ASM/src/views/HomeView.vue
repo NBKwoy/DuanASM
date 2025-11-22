@@ -1,10 +1,13 @@
 <script setup>
 import { reactive, computed, ref } from 'vue';
 import { store } from '../store';
+import PostModal from '../components/PostModal.vue';
 
 const newPost = reactive({ title: '', content: '', image: '' });
 const showImageInput = ref(false);
 const replyState = reactive({}); // Lưu trạng thái ô nhập trả lời
+const selectedPost = ref(null);
+const showModal = ref(false);
 
 // --- HELPERS ---
 const getUserName = (id) => store.users.find(u => u.id === id)?.name || 'Unknown';
@@ -115,6 +118,43 @@ const addComment = (post) => {
     post.comments.push({ id: Date.now(), userId: store.currentUser.id, content: post.newComment, timestamp: new Date().toISOString(), replies: [] });
     post.newComment = ''; store.saveDB();
 };
+
+// Mở modal khi click vào bài viết
+const openPostModal = (post) => {
+    selectedPost.value = { ...post };
+    showModal.value = true;
+};
+
+// Đóng modal
+const closeModal = () => {
+    showModal.value = false;
+    selectedPost.value = null;
+};
+
+// Xử lý like trong modal
+const handleModalLike = (post) => {
+    toggleLike(post);
+    // Cập nhật selectedPost
+    if (selectedPost.value && selectedPost.value.id === post.id) {
+        selectedPost.value.likes = post.likes;
+    }
+};
+
+// Xử lý share trong modal
+const handleModalShare = (post) => {
+    handleShare(post);
+    if (selectedPost.value && selectedPost.value.id === post.id) {
+        selectedPost.value.shares = post.shares;
+    }
+};
+
+// Xử lý add comment trong modal
+const handleModalAddComment = (post) => {
+    addComment(post);
+    if (selectedPost.value && selectedPost.value.id === post.id) {
+        selectedPost.value.comments = post.comments;
+    }
+};
 </script>
 
 <template>
@@ -145,7 +185,7 @@ const addComment = (post) => {
                                 <button @click="newPost.image = ''" class="btn btn-dark btn-sm position-absolute top-0 end-0 m-2 rounded-circle"><i class="fas fa-times"></i></button>
                             </div>
                             
-                            <div v-if="showImageInput" class="mb-3 fade-in mt-2"><input v-model="newPost.image" class="form-control bg-light border-0 rounded-pill" placeholder="Dán URL hình ảnh..."></div>
+                            <div v-if="showImageInput" class="mb-3 mt-2"><input v-model="newPost.image" class="form-control bg-light border-0 rounded-pill" placeholder="Dán URL hình ảnh..."></div>
                             
                             <hr class="text-muted opacity-25 my-2">
                             
@@ -156,7 +196,7 @@ const addComment = (post) => {
                         </div>
                     </div>
 
-                    <div v-for="post in sortedPosts" :key="post.id" class="card shadow-sm border-0 mb-4 rounded-4">
+                    <div v-for="post in sortedPosts" :key="post.id" class="card shadow-sm border-0 mb-4 rounded-4" style="cursor: pointer;" @click="openPostModal(post)">
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div class="d-flex align-items-center mb-3">
@@ -186,19 +226,19 @@ const addComment = (post) => {
                                         <small class="text-muted" style="font-size: 12px;">{{ formatDate(post.timestamp) }} <i class="fas fa-globe-asia ms-1"></i></small>
                                     </div>
                                 </div>
-                                <div v-if="post.userId === store.currentUser.id" class="dropdown">
+                                <div v-if="post.userId === store.currentUser.id" class="dropdown" @click.stop>
                                     <button class="btn btn-light btn-sm rounded-circle" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-h"></i></button>
                                     <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                        <li><button class="dropdown-item" @click="editPost(post)">Chỉnh sửa</button></li>
-                                        <li><button class="dropdown-item text-danger" @click="deletePost(post.id)">Xóa</button></li>
+                                        <li><button class="dropdown-item" @click.stop="editPost(post)">Chỉnh sửa</button></li>
+                                        <li><button class="dropdown-item text-danger" @click.stop="deletePost(post.id)">Xóa</button></li>
                                     </ul>
                                 </div>
                             </div>
 
-                            <div v-if="post.isEditing">
+                            <div v-if="post.isEditing" @click.stop>
                                 <input v-model="post.tempTitle" class="form-control mb-2 fw-bold">
                                 <textarea v-model="post.tempContent" class="form-control mb-2" rows="3"></textarea>
-                                <div class="d-flex justify-content-end"><button @click="saveEdit(post)" class="btn btn-success btn-sm me-2">Lưu</button><button @click="post.isEditing = false" class="btn btn-secondary btn-sm">Hủy</button></div>
+                                <div class="d-flex justify-content-end"><button @click.stop="saveEdit(post)" class="btn btn-success btn-sm me-2">Lưu</button><button @click.stop="post.isEditing = false" class="btn btn-secondary btn-sm">Hủy</button></div>
                             </div>
                             <div v-else>
                                 <h5 v-if="post.title !== 'Chia sẻ mới'" class="card-title fw-bold mb-2">{{ post.title }}</h5>
@@ -206,23 +246,23 @@ const addComment = (post) => {
                                 <div v-if="post.image" class="rounded-3 overflow-hidden mb-3 bg-light border d-flex justify-content-center"><img :src="post.image" class="img-fluid" style="max-height: 500px;"></div>
                             </div>
 
-                            <div class="d-flex justify-content-between text-muted border-top border-bottom py-2 my-3">
-                                <button @click="toggleLike(post)" class="btn flex-grow-1 border-0 fw-bold transition-btn" :class="post.likes && post.likes.includes(store.currentUser.id) ? 'text-primary' : 'text-muted'"><i class="fas fa-thumbs-up me-2"></i>{{ post.likes?.length || '' }} Thích</button>
-                                <button class="btn btn-light flex-grow-1 border-0 text-muted transition-btn"><i class="far fa-comment-alt me-2"></i>Bình luận</button>
-                                <button @click="handleShare(post)" class="btn btn-light flex-grow-1 border-0 text-muted transition-btn"><i class="fas fa-share me-2"></i>{{ post.shares || '' }} Chia sẻ</button>
+                            <div class="d-flex justify-content-between text-muted border-top border-bottom py-2 my-3" @click.stop>
+                                <button @click.stop="toggleLike(post)" class="btn flex-grow-1 border-0 fw-bold" :class="post.likes && post.likes.includes(store.currentUser.id) ? 'text-primary' : 'text-muted'"><i class="fas fa-thumbs-up me-2"></i>{{ post.likes?.length || '' }} Thích</button>
+                                <button class="btn btn-light flex-grow-1 border-0 text-muted fw-bold"><i class="far fa-comment-alt me-2"></i>Bình luận</button>
+                                <button @click.stop="handleShare(post)" class="btn btn-light flex-grow-1 border-0 text-muted fw-bold"><i class="fas fa-share me-2"></i>{{ post.shares || '' }} Chia sẻ</button>
                             </div>
 
-                            <div>
+                            <div @click.stop>
                                 <div v-for="cmt in post.comments" :key="cmt.id" class="mb-3">
                                     <div class="d-flex">
                                         <img :src="getUserAvatar(cmt.userId)" class="rounded-circle me-2 object-fit-cover mt-1" width="32" height="32">
                                         <div class="flex-grow-1">
-                                            <div class="bg-light-gray rounded-3 p-2 px-3 d-inline-block">
+                                            <div class="bg-light rounded-3 p-2 px-3 d-inline-block">
                                                 <span class="fw-bold me-2 d-block" style="font-size: 0.9rem;">{{ getUserName(cmt.userId) }}</span>
                                                 <span style="font-size: 0.95rem;">{{ cmt.content }}</span>
                                             </div>
                                             <div class="mt-1 ms-1">
-                                                <small @click="toggleReplyInput(cmt.id)" class="text-muted fw-bold cursor-pointer hover-underline me-3" style="font-size: 12px;">Trả lời</small>
+                                                <small @click="toggleReplyInput(cmt.id)" class="text-muted fw-bold me-3" style="font-size: 12px; cursor: pointer;" @mouseenter="$event.target.style.textDecoration='underline'" @mouseleave="$event.target.style.textDecoration='none'">Trả lời</small>
                                                 <small class="text-muted" style="font-size: 11px;">{{ formatDate(cmt.timestamp) }}</small>
                                             </div>
                                         </div>
@@ -232,18 +272,18 @@ const addComment = (post) => {
                                         <div v-for="reply in cmt.replies" :key="reply.id" class="d-flex mb-2">
                                             <img :src="getUserAvatar(reply.userId)" class="rounded-circle me-2 object-fit-cover mt-1" width="24" height="24">
                                             <div>
-                                                <div class="bg-light-gray rounded-3 p-2 px-3 d-inline-block">
+                                                <div class="bg-light rounded-3 p-2 px-3 d-inline-block">
                                                     <span class="fw-bold me-2 d-block" style="font-size: 0.85rem;">{{ getUserName(reply.userId) }}</span>
                                                     <span style="font-size: 0.9rem;">{{ reply.content }}</span>
                                                 </div>
                                                 <div class="mt-1 ms-1">
-                                                    <small @click="toggleReplyInput(cmt.id, reply.userId)" class="text-muted fw-bold cursor-pointer hover-underline" style="font-size: 11px;">Trả lời</small>
+                                                    <small @click="toggleReplyInput(cmt.id, reply.userId)" class="text-muted fw-bold" style="font-size: 11px; cursor: pointer;" @mouseenter="$event.target.style.textDecoration='underline'" @mouseleave="$event.target.style.textDecoration='none'">Trả lời</small>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div v-if="replyState[`show_${cmt.id}`]" class="d-flex mt-2 ms-5 align-items-center fade-in">
+                                    <div v-if="replyState[`show_${cmt.id}`]" class="d-flex mt-2 ms-5 align-items-center">
                                         <img :src="store.currentUser.avatar || store.defaultAvatar" class="rounded-circle me-2 object-fit-cover" width="24" height="24">
                                         <div class="input-group input-group-sm">
                                             <input v-model="replyState[cmt.id]" @keyup.enter="submitReply(post, cmt.id)" class="form-control rounded-pill bg-light border-0 px-3" placeholder="Viết câu trả lời...">
@@ -265,21 +305,19 @@ const addComment = (post) => {
                 </div>
             </div>
         </div>
+
+        <!-- Post Modal -->
+        <PostModal 
+            :post="selectedPost" 
+            :show="showModal"
+            @close="closeModal"
+            @like="handleModalLike"
+            @share="handleModalShare"
+            @add-comment="handleModalAddComment"
+        />
     </div>
 </template>
 
 <style scoped>
-.page-background {
-    background-color: #f0f2f5;
-    background-image: linear-gradient(to bottom right, rgba(255,255,255,0.8), rgba(240,242,245,0.1)); 
-    min-height: 100vh;
-    padding-top: 20px; 
-    margin-top: -1.5rem;
-}
-.bg-light-gray { background-color: #f0f2f5; }
-.cursor-pointer { cursor: pointer; }
-.hover-underline:hover { text-decoration: underline !important; }
-.transition-btn:hover { background-color: #e4e6eb; }
-.fade-in { animation: fadeIn 0.3s ease-in; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+/* Chỉ dùng Bootstrap - không có custom styles */
 </style>

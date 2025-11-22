@@ -53,6 +53,12 @@ const handleSearch = () => {
                     </RouterLink>
                 </li>
                 <li class="nav-item px-2">
+                    <RouterLink class="nav-link d-flex align-items-center" to="/hot" active-class="active-nav">
+                        <i class="fas fa-fire fs-5 me-2 text-danger"></i>
+                        <span class="fw-semibold">Hot</span>
+                    </RouterLink>
+                </li>
+                <li class="nav-item px-2">
                     <RouterLink class="nav-link d-flex align-items-center" to="/friends" active-class="active-nav">
                         <i class="fas fa-user-friends fs-5 me-2"></i>
                         <span class="fw-semibold">Bạn bè</span>
