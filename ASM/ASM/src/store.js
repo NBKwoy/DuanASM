@@ -28,10 +28,10 @@ const seedUsers = [{
     },
     {
         id: 3,
-        name: "LowTech",
+        name: "Reviewer Công Nghệ",
         email: "tech@gmail.com",
         password: "123",
-        avatar: "https://scontent.fsgn5-8.fna.fbcdn.net/v/t39.30808-1/320533217_670382914572780_1357968041736338725_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=109&ccb=1-7&_nc_sid=2d3e12&_nc_eui2=AeF416B-wXldshlXaDgNltRGBJftrpQcobQEl-2ulByhtE8SrdoAwu8ZK3ob14RQXjc-8Sjxd116RhifY9K19nCi&_nc_ohc=sDGKagJLB-4Q7kNvwGu-PNJ&_nc_oc=AdmZsKWcK5Ld6C1dKzXPLY6Ih72sF6v1JDfHTJ5D1th4QdLtWG3_XuJVGqN2LW56Faz80cy0rpAG2JVKCImdKPII&_nc_zt=24&_nc_ht=scontent.fsgn5-8.fna&_nc_gid=stjoZcVX3ajRSwXRIs4ABg&oh=00_AfjjsVOyAcHSGBgABCt0HwLc0kY4LM3rCQlw4MPTe-A_cA&oe=69287F1Ds",
+        avatar: "https://cdn-icons-png.flaticon.com/512/428/428001.png",
         cover: defaultCover,
         friends: [1],
         friendRequests: [],
@@ -40,13 +40,12 @@ const seedUsers = [{
 ];
 
 // 2. DỮ LIỆU BÀI VIẾT CHI TIẾT (SEED DATA)
-// Chứa các từ khóa: FPT, Wukong, Bão, iPhone, Video, Java...
 const seedPosts = [{
         id: 101,
         userId: 1,
         title: 'Khai giảng FPT Polytechnic 2024',
         content: 'Không khí khai giảng tại FPT Polytechnic TP.HCM hôm nay thật sự bùng nổ! 🔥 Chào mừng các tân sinh viên K20. Chúc các bạn có một kỳ học thật rực rỡ.\n#FPT #Polytechnic #BackToSchool',
-        image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTwdFzkI_TaXHVaOkU3lPF_oEjrbjfBUICQ8A&ss',
+        image: 'https://caodang.fpt.edu.vn/wp-content/uploads/2022/08/9N4A0347.jpg',
         timestamp: new Date().toISOString(), // Mới nhất
         comments: [],
         likes: [2, 3], // 2 like
@@ -55,9 +54,9 @@ const seedPosts = [{
     {
         id: 102,
         userId: 3,
-        title: 'Đánh giá iPhone 17 Pro Max',
-        content: 'Trên tay iPhone 17 Pro Max màu Titan Sa Mạc mới. Nút bấm Camera Control khá thú vị nhưng cần thời gian làm quen. Hiệu năng A18 Pro quá khủng khiếp! \nAnh em thấy sao về màu mới này? #iPhone16 #Apple #Review',
-        image: 'https://cdn2.fptshop.com.vn/unsafe/828x0/filters:format(webp):quality(75)/iphone_17_pro_slide_1_c27e78032a.jpg',
+        title: 'Đánh giá iPhone 16 Pro Max',
+        content: 'Trên tay iPhone 16 Pro Max màu Titan Sa Mạc mới. Nút bấm Camera Control khá thú vị nhưng cần thời gian làm quen. Hiệu năng A18 Pro quá khủng khiếp! \nAnh em thấy sao về màu mới này? #iPhone16 #Apple #Review',
+        image: 'https://images.unsplash.com/photo-1696446701796-da61225697cc?q=80&w=1000&auto=format&fit=crop',
         timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 tiếng trước
         comments: [
             { id: 1, userId: 2, content: "Màu này nhìn sang quá!", timestamp: new Date().toISOString(), replies: [] }
@@ -68,10 +67,10 @@ const seedPosts = [{
     {
         id: 103,
         userId: 2,
-        title: 'Trailer MV Mới - Sky ơi!',
+        title: 'Đừng Làm Trái Tim Anh Đau - Sơn Tùng M-TP',
         content: 'Một món quà nhỏ tặng đại gia đình Sky. Hãy chờ đón siêu phẩm vào tối nay nhé! 🎵🎹 \n#SonTungMTP #Comeback #Music',
-        // Giả lập Video bằng đuôi .mp4 để bộ lọc nhận diện
-        image: 'https://www.youtube.com/watch?v=abPmZCZZrFA&list=RDabPmZCZZrFA&start_radio=1',
+        // Link YouTube thật để test chức năng iframe
+        image: 'https://www.youtube.com/watch?v=abPmZCzIqP8',
         timestamp: new Date(Date.now() - 7200000).toISOString(),
         comments: [],
         likes: [1, 3, 4, 5, 6, 7, 8, 9, 10], // Nhiều like nhất -> Sẽ lên top "Phổ biến"
@@ -93,7 +92,8 @@ const seedPosts = [{
         userId: 3,
         title: 'Black Myth: Wukong - Game of the Year?',
         content: 'Đồ họa đỉnh cao, cốt truyện lôi cuốn. Wukong thực sự là niềm tự hào của game Á Đông năm nay. Đã ai đánh bại được con Boss đầu tiên chưa? 🎮🐒 #Wukong #Game #BlackMyth',
-        image: 'https://www.youtube.com/watch?v=u83VdXAVq08',
+        // Link YouTube ngắn (youtu.be) để test chức năng parser
+        image: 'https://youtu.be/1k0j57_q39o?si=sample',
         timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 ngày trước
         comments: [],
         likes: [1, 2],
@@ -122,11 +122,20 @@ export const store = reactive({
     users: JSON.parse(localStorage.getItem('poly_users_db')) || seedUsers,
     posts: finalPosts,
 
+    // --- DARK MODE ---
     theme: localStorage.getItem('poly_theme') || 'light',
+
+    toggleTheme() {
+        this.theme = this.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', this.theme);
+        localStorage.setItem('poly_theme', this.theme);
+    },
 
     initTheme() {
         document.documentElement.setAttribute('data-bs-theme', this.theme);
     },
+
+    // --- DATABASE ---
     saveDB() {
         localStorage.setItem('poly_users_db', JSON.stringify(this.users));
         localStorage.setItem('poly_posts_db', JSON.stringify(this.posts));

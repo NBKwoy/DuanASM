@@ -11,66 +11,36 @@ import Notifications from './components/Notifications.vue'
 import Profile from './components/Profile.vue'
 import HotSearch from './components/HotSearch.vue'
 
-// --- STATE QUẢN LÝ ---
 const currentTab = ref('login')
 const searchQuery = ref('')
-const showNavbar = ref(true) // Kiểm soát ẩn/hiện Navbar
-const pendingPostId = ref(null); // ID bài viết cần mở (từ thông báo)
+const showNavbar = ref(true)
+const pendingPostId = ref(null);
 
-// --- HÀM ĐIỀU HƯỚNG ---
-const switchTab = (tabName) => {
-    currentTab.value = tabName;
-    window.scrollTo(0, 0);
-}
+const switchTab = (tabName) => { currentTab.value = tabName; window.scrollTo(0, 0); }
+const handleLogout = () => { store.logout(); currentTab.value = 'login'; }
+const handleSearch = () => { if(searchQuery.value) alert('Bạn đang tìm: ' + searchQuery.value); }
 
-const handleLogout = () => {
-    store.logout();
-    currentTab.value = 'login';
-}
-
-const handleSearch = () => {
-    if(searchQuery.value) alert('Bạn đang tìm: ' + searchQuery.value);
-}
-
-// --- LOGIC XỬ LÝ TỪ THÔNG BÁO (QUAN TRỌNG) ---
-// Hàm này được gọi khi User bấm vào thông báo liên quan đến bài viết
 const handleViewPost = (postId) => {
-    console.log("Nhận yêu cầu mở bài viết:", postId);
-    currentTab.value = 'home'; // 1. Chuyển về trang chủ
-    pendingPostId.value = postId; // 2. Gán ID để Home tự mở Modal
+    currentTab.value = 'home';
+    pendingPostId.value = postId;
     window.scrollTo(0, 0);
 };
 
-// --- LOGIC SCROLL NAVBAR (HIỆU ỨNG ẨN HIỆN) ---
 const handleScroll = () => {
-    // Nếu không phải trang Home, luôn hiện Navbar
-    if (currentTab.value !== 'home') {
-        showNavbar.value = true;
-        return;
-    }
-    // Nếu là Home: Cuộn xuống > 250px mới hiện
+    if (currentTab.value !== 'home') { showNavbar.value = true; return; }
     showNavbar.value = window.scrollY > 250;
 }
 
-// --- LIFECYCLE HOOKS ---
 onMounted(() => {
     window.addEventListener('scroll', handleScroll);
-    
-    // Kiểm tra đăng nhập
     if (store.currentUser) {
         currentTab.value = 'home';
         store.initTheme();
-        showNavbar.value = false; // Mới vào Home thì ẩn Navbar đi
-    } else {
-        currentTab.value = 'login';
-    }
+        showNavbar.value = false;
+    } else { currentTab.value = 'login'; }
 });
+onUnmounted(() => { window.removeEventListener('scroll', handleScroll); });
 
-onUnmounted(() => {
-    window.removeEventListener('scroll', handleScroll);
-});
-
-// Theo dõi thay đổi Tab để reset trạng thái Navbar
 watch(currentTab, (newTab) => {
     if (newTab !== 'home') showNavbar.value = true;
     else showNavbar.value = (window.scrollY > 250);
@@ -78,13 +48,16 @@ watch(currentTab, (newTab) => {
 </script>
 
 <template>
-  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm fixed-top transition-navbar"
-       :class="{ 'navbar-hidden': !showNavbar, 'navbar-visible': showNavbar }"
+  <nav class="navbar navbar-expand-lg shadow-sm fixed-top transition-navbar"
+       :class="[
+         !showNavbar ? 'navbar-hidden' : 'navbar-visible',
+         store.theme === 'dark' ? 'navbar-dark' : 'navbar-light'
+       ]"
        v-if="store.currentUser">
     
     <div class="container">
         <a class="navbar-brand py-0" href="#" @click.prevent="switchTab('home')">
-            <img src="https://i.imgur.com/fr2DiX6.png" alt="Social Internet" height="50">
+            <img src="https://i.imgur.com/fr2DiX6.png" alt="Social" height="50">
         </a>
 
         <div class="input-group d-none d-md-flex" style="width: 240px;">
@@ -122,8 +95,15 @@ watch(currentTab, (newTab) => {
                 </li>
             </ul>
 
-            <ul class="navbar-nav align-items-center">
-                <li class="nav-item me-2 fw-bold d-none d-lg-block">{{ store.currentUser.name }}</li>
+            <ul class="navbar-nav align-items-center gap-3">
+                <li class="nav-item cursor-pointer" @click="store.toggleTheme()">
+                    <div class="btn btn-light rounded-circle border d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <i v-if="store.theme === 'dark'" class="fas fa-sun text-warning"></i>
+                        <i v-else class="fas fa-moon text-secondary"></i>
+                    </div>
+                </li>
+
+                <li class="nav-item fw-bold d-none d-lg-block text-body">{{ store.currentUser.name }}</li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         <img :src="store.currentUser.avatar || store.defaultAvatar" class="rounded-circle border object-fit-cover" width="40" height="40">
@@ -143,35 +123,83 @@ watch(currentTab, (newTab) => {
   <Register v-if="!store.currentUser && currentTab === 'register'" @switch-login="switchTab('login')" />
 
   <div class="container-fluid p-0" v-if="store.currentUser">
-      
-      <Home 
-        v-if="currentTab === 'home'" 
-        @navigate="switchTab" 
-        :open-post-id="pendingPostId" 
-        @post-opened="pendingPostId = null" 
-      />
-      
+      <Home v-if="currentTab === 'home'" @navigate="switchTab" :open-post-id="pendingPostId" @post-opened="pendingPostId = null" />
       <div class="container pt-5 mt-4" v-if="currentTab !== 'home'">
           <Friends v-if="currentTab === 'friends'" @navigate="switchTab" />
-          
-          <Notifications 
-            v-if="currentTab === 'notifications'" 
-            @navigate="switchTab" 
-            @view-post="handleViewPost" 
-          />
-          
+          <Notifications v-if="currentTab === 'notifications'" @navigate="switchTab" @view-post="handleViewPost" />
           <Profile v-if="currentTab === 'profile'" />
           <HotSearch v-if="currentTab === 'hotsearch'" />
       </div>
   </div>
 </template>
 
-<style scoped>
+<style>
+/* --- CSS VARIABLES --- */
+:root {
+    --bg-body: #f0f2f5;
+    --bg-card: #ffffff;
+    --text-color: #050505;
+    --text-muted: #65676b;
+    --input-bg: #f0f2f5;
+    --border-color: #dee2e6;
+}
+
+/* Dark Mode Variables */
+[data-bs-theme="dark"] {
+    --bg-body: #18191a;
+    --bg-card: #242526;
+    --text-color: #e4e6eb;
+    --text-muted: #b0b3b8;
+    --input-bg: #3a3b3c;
+    --border-color: #3e4042;
+    --bs-body-bg: #18191a; 
+}
+
+/* --- GLOBAL STYLES --- */
+body, .page-background, #app {
+    background-color: var(--bg-body) !important;
+    background-image: none !important;
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* Navbar Styles - QUAN TRỌNG: Dùng var(--bg-card) */
+.navbar, .sticky-sidebar .list-group {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+}
+
+.card, .modal-content {
+    background-color: var(--bg-card) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+.form-control, .bg-light, .btn-light, .input-group-text {
+    background-color: var(--input-bg) !important;
+    color: var(--text-color) !important;
+    border-color: transparent !important;
+}
+
+.form-control::placeholder { color: var(--text-muted) !important; }
+.text-dark, .text-body { color: var(--text-color) !important; }
+.text-muted, .text-secondary { color: var(--text-muted) !important; }
+hr, .border, .border-bottom, .border-top { border-color: var(--border-color) !important; }
+
+/* Hover Effects */
+[data-bs-theme="dark"] .hover-bg:hover,
+[data-bs-theme="dark"] .dropdown-item:hover,
+[data-bs-theme="dark"] .list-group-item-action:hover {
+    background-color: #3a3b3c !important;
+}
+[data-bs-theme="dark"] .dropdown-menu { background-color: var(--bg-card); border-color: var(--border-color); }
+[data-bs-theme="dark"] .dropdown-item { color: var(--text-color); }
+[data-bs-theme="dark"] .nav-link:hover { background-color: #3a3b3c; }
+
 .active-nav { color: var(--bs-primary) !important; border-bottom: 3px solid var(--bs-primary); }
 .nav-link { cursor: pointer; transition: all 0.2s; border-bottom: 3px solid transparent; }
-.nav-link:hover { background-color: #f8f9fa; border-radius: 8px; }
+.nav-link:hover { background-color: rgba(0,0,0,0.05); border-radius: 8px; }
 
-/* Hiệu ứng trượt Navbar */
 .transition-navbar { transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out; }
 .navbar-hidden { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 .navbar-visible { transform: translateY(0); opacity: 1; }
