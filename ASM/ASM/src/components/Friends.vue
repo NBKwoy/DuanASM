@@ -2,13 +2,16 @@
 import { computed } from 'vue';
 import { store } from '../store';
 
+// 1. Khai báo emit để điều hướng
+const emit = defineEmits(['navigate']);
+
 // Lấy danh sách bạn bè
 const myFriends = computed(() => {
     const friendIds = store.currentUser.friends || [];
     return store.users.filter(u => friendIds.includes(u.id));
 });
 
-// Lấy danh sách lời mời đang chờ (Chưa xem thông báo)
+// Lấy danh sách lời mời đang chờ
 const pendingRequests = computed(() => {
     const reqIds = store.currentUser.friendRequests || [];
     return store.users.filter(u => reqIds.includes(u.id));
@@ -31,6 +34,7 @@ const unfriend = (id) => {
 
 <template>
     <div class="container py-4" style="margin-top: -1.5rem;">
+        
         <div v-if="pendingRequests.length > 0" class="mb-4">
             <h5 class="fw-bold mb-3">Lời mời kết bạn ({{ pendingRequests.length }})</h5>
             <div class="row row-cols-1 row-cols-md-2 g-3">
@@ -41,7 +45,7 @@ const unfriend = (id) => {
                             <div class="w-100">
                                 <h6 class="fw-bold">{{ user.name }}</h6>
                                 <div class="d-flex mt-2">
-                                    <RouterLink to="/notifications" class="btn btn-primary btn-sm w-100 fw-bold">Xem & Phản hồi</RouterLink>
+                                    <button @click="emit('navigate', 'notifications')" class="btn btn-primary btn-sm w-100 fw-bold">Xem & Phản hồi</button>
                                 </div>
                             </div>
                         </div>

@@ -1,25 +1,46 @@
 <script setup>
 import { reactive } from 'vue';
-import { useRouter, RouterLink } from 'vue-router';
 import { store } from '../store';
 
-const router = useRouter();
+// 1. Thay Router bằng Emit
+const emit = defineEmits(['switch-login']);
+
 const form = reactive({ name: '', email: '', password: '' });
 
 const register = () => {
+    // Validate cơ bản
+    if (!form.name || !form.email || !form.password) {
+        alert("Vui lòng nhập đầy đủ thông tin!"); return;
+    }
+
+    // Kiểm tra trùng email
     if (store.users.some(u => u.email === form.email)) {
         alert('Email đã tồn tại!'); return;
     }
-    const newUser = { id: Date.now(), ...form, avatar: store.defaultAvatar };
+
+    // 2. Tạo User mới (Cập nhật đủ trường dữ liệu để không bị lỗi ở trang Home)
+    const newUser = { 
+        id: Date.now(), 
+        ...form, 
+        avatar: store.defaultAvatar,
+        cover: store.defaultCover, // Thêm ảnh bìa mặc định
+        friends: [],
+        friendRequests: [],
+        notifications: []
+    };
+
     store.users.push(newUser);
     store.saveDB();
+    
     alert('Đăng ký thành công!');
-    router.push('/login');
+    
+    // 3. Chuyển về trang đăng nhập bằng emit
+    emit('switch-login');
 };
 </script>
 
 <template>
-<div class="row justify-content-center align-items-center min-vh-100 m-0 full-bg">
+    <div class="row justify-content-center align-items-center min-vh-100 m-0 full-bg">
         <div class="col-md-5 col-lg-4">
             <div class="card shadow border-0 p-4 glass-effect">
                 
@@ -42,7 +63,7 @@ const register = () => {
                     <button class="btn btn-primary w-100 fw-bold">Đăng ký</button>
                 </form>
                 <div class="text-center mt-3">
-                    <RouterLink to="/login" class="text-decoration-none">Đã có tài khoản? Đăng nhập</RouterLink>
+                    <a href="#" @click.prevent="emit('switch-login')" class="text-decoration-none">Đã có tài khoản? Đăng nhập</a>
                 </div>
             </div>
         </div>
@@ -50,6 +71,7 @@ const register = () => {
 </template>
 
 <style scoped>
+/* Giữ nguyên CSS của bạn */
 .full-bg {
     background-image: url('https://st.depositphotos.com/36924814/61254/i/450/depositphotos_612543668-stock-photo-abstract-line-blue-white-wave.jpg');
     background-size: cover;
