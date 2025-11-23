@@ -1,39 +1,33 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { store } from '../store';
-import PostModal from '../components/PostModal.vue';
-import { getUserName, getUserAvatar, formatDate } from '../utils/helpers';
+import { store } from '../store-supabase';
+import PostModal from './PostModal.vue';
 
-// ===== STATE (Trạng thái) =====
-const selectedPost = ref(null); // Bài viết đang được chọn để hiển thị trong modal
-const showModal = ref(false); // Hiển thị/ẩn modal
+const selectedPost = ref(null);
+const showModal = ref(false);
 
-// ===== COMPUTED PROPERTIES (Tính toán tự động) =====
+// Helper functions
+const getUserName = (id) => store.users.find(u => u.id === id)?.name || 'Unknown';
+const getUserAvatar = (id) => store.users.find(u => u.id === id)?.avatar || store.defaultAvatar;
+const formatDate = (iso) => new Date(iso).toLocaleString('vi-VN');
 
-/**
- * Lấy danh sách bài viết hot (nhiều likes nhất)
- * Chỉ hiển thị các bài viết có ít nhất 1 like
- * Sắp xếp theo số lượng like giảm dần
- */
+// Sắp xếp bài viết theo số lượng like
 const hotPosts = computed(() => {
     return [...store.posts]
-        .filter(post => post.likes && post.likes.length > 0) // Chỉ lấy bài có like
-        .sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0)); // Sắp xếp giảm dần
+        .filter(post => post.likes && post.likes.length > 0)
+        .sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
 });
 
-// Mở modal khi click vào bài viết
 const openPostModal = (post) => {
     selectedPost.value = { ...post };
     showModal.value = true;
 };
 
-// Đóng modal
 const closeModal = () => {
     showModal.value = false;
     selectedPost.value = null;
 };
 
-// Like/Unlike
 const toggleLike = (post) => {
     if (!post.likes) post.likes = [];
     const idx = post.likes.indexOf(store.currentUser.id);
@@ -42,44 +36,25 @@ const toggleLike = (post) => {
     } else {
         post.likes.splice(idx, 1);
     }
-    
-    // Cập nhật trong store
     const storePost = store.posts.find(p => p.id === post.id);
-    if (storePost) {
-        storePost.likes = post.likes;
-    }
-    
-    // Cập nhật selectedPost nếu đang mở modal
-    if (selectedPost.value && selectedPost.value.id === post.id) {
-        selectedPost.value.likes = post.likes;
-    }
-    
+    if (storePost) storePost.likes = post.likes;
+    if (selectedPost.value?.id === post.id) selectedPost.value.likes = post.likes;
     store.saveDB();
 };
 
-// Share
 const handleShare = (post) => {
     if (!post.shares) post.shares = 0;
     post.shares++;
-    
     const storePost = store.posts.find(p => p.id === post.id);
-    if (storePost) {
-        storePost.shares = post.shares;
-    }
-    
-    if (selectedPost.value && selectedPost.value.id === post.id) {
-        selectedPost.value.shares = post.shares;
-    }
-    
+    if (storePost) storePost.shares = post.shares;
+    if (selectedPost.value?.id === post.id) selectedPost.value.shares = post.shares;
     store.saveDB();
     alert('Đã chia sẻ!');
 };
 
-// Thêm bình luận
 const addComment = (post) => {
     if (!post.newComment) return;
     if (!post.comments) post.comments = [];
-    
     post.comments.push({
         id: Date.now(),
         userId: store.currentUser.id,
@@ -87,20 +62,10 @@ const addComment = (post) => {
         timestamp: new Date().toISOString(),
         replies: []
     });
-    
     post.newComment = '';
-    
-    // Cập nhật trong store
     const storePost = store.posts.find(p => p.id === post.id);
-    if (storePost) {
-        storePost.comments = post.comments;
-    }
-    
-    // Cập nhật selectedPost
-    if (selectedPost.value && selectedPost.value.id === post.id) {
-        selectedPost.value.comments = post.comments;
-    }
-    
+    if (storePost) storePost.comments = post.comments;
+    if (selectedPost.value?.id === post.id) selectedPost.value.comments = post.comments;
     store.saveDB();
 };
 </script>
@@ -113,8 +78,7 @@ const addComment = (post) => {
                     <div class="card border-0 shadow-sm mb-4 rounded-4">
                         <div class="card-body p-4">
                             <h3 class="fw-bold mb-0">
-                                <i class="fas fa-fire text-danger me-2"></i>
-                                Bài viết Hot
+                                <i class="fas fa-fire text-danger me-2"></i>Bài viết Hot
                             </h3>
                             <p class="text-muted mb-0 mt-2">Các bài viết được yêu thích nhất</p>
                         </div>
@@ -139,27 +103,15 @@ const addComment = (post) => {
                                     <i class="fas fa-fire me-1"></i>{{ post.likes?.length || 0 }} Likes
                                 </div>
                             </div>
-
                             <h5 v-if="post.title && post.title !== 'Chia sẻ mới'" class="fw-bold mb-3">{{ post.title }}</h5>
                             <p class="mb-3" style="white-space: pre-line;">{{ post.content }}</p>
-                            
                             <div v-if="post.image" class="mb-3">
                                 <img :src="post.image" class="img-fluid rounded-3 w-100" style="max-height: 400px; object-fit: cover;">
                             </div>
-
                             <div class="d-flex justify-content-between text-muted border-top pt-3">
-                                <span>
-                                    <i class="fas fa-thumbs-up text-primary me-1"></i>
-                                    {{ post.likes?.length || 0 }} Thích
-                                </span>
-                                <span>
-                                    <i class="far fa-comment-alt me-1"></i>
-                                    {{ post.comments?.length || 0 }} Bình luận
-                                </span>
-                                <span>
-                                    <i class="fas fa-share me-1"></i>
-                                    {{ post.shares || 0 }} Chia sẻ
-                                </span>
+                                <span><i class="fas fa-thumbs-up text-primary me-1"></i>{{ post.likes?.length || 0 }} Thích</span>
+                                <span><i class="far fa-comment-alt me-1"></i>{{ post.comments?.length || 0 }} Bình luận</span>
+                                <span><i class="fas fa-share me-1"></i>{{ post.shares || 0 }} Chia sẻ</span>
                             </div>
                         </div>
                     </div>
@@ -167,15 +119,7 @@ const addComment = (post) => {
             </div>
         </div>
 
-        <!-- Post Modal -->
-        <PostModal 
-            :post="selectedPost" 
-            :show="showModal"
-            @close="closeModal"
-            @like="toggleLike"
-            @share="handleShare"
-            @add-comment="addComment"
-        />
+        <PostModal :post="selectedPost" :show="showModal" @close="closeModal" @like="toggleLike" @share="handleShare" @add-comment="addComment" />
     </div>
 </template>
 

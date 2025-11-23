@@ -1,69 +1,50 @@
 <script setup>
 import { reactive, computed, ref } from 'vue';
-import { store } from '../store';
-import PostModal from '../components/PostModal.vue';
-import { getUserName, getUserAvatar, formatDate, isValidImageUrl } from '../utils/helpers';
+import { store } from '../store-supabase';
+import PostModal from './PostModal.vue';
 
-// ===== STATE (Trạng thái) =====
-const newPost = reactive({ title: '', content: '', image: '' }); // Form tạo bài viết mới
-const showImageInput = ref(false); // Hiển thị/ẩn ô nhập URL hình ảnh
-const replyState = reactive({}); // Lưu trạng thái ô nhập trả lời cho từng comment
-const selectedPost = ref(null); // Bài viết đang được chọn để hiển thị trong modal
-const showModal = ref(false); // Hiển thị/ẩn modal
+// ===== STATE =====
+const newPost = reactive({ title: '', content: '', image: '' });
+const showImageInput = ref(false);
+const replyState = reactive({});
+const selectedPost = ref(null);
+const showModal = ref(false);
 
-// ===== HELPER FUNCTIONS (Hàm hỗ trợ) =====
+// ===== HELPER FUNCTIONS =====
+const getUserName = (id) => store.users.find(u => u.id === id)?.name || 'Unknown';
+const getUserAvatar = (id) => store.users.find(u => u.id === id)?.avatar || store.defaultAvatar;
+const formatDate = (iso) => new Date(iso).toLocaleString('vi-VN');
+const isValidImageUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    try {
+        const urlObj = new URL(url);
+        return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
 
-/**
- * Kiểm tra trạng thái quan hệ bạn bè giữa currentUser và targetUser
- * @param {number} targetId - ID của người dùng cần kiểm tra
- * @returns {string} 'friend' | 'sent' | 'received' | 'none'
- */
 const getFriendStatus = (targetId) => {
     const me = store.currentUser;
-    
-    // 1. Đã là bạn bè
-    if (me.friends && me.friends.includes(targetId)) {
-        return 'friend';
-    }
-    
-    // 2. Mình đã gửi lời mời kết bạn (kiểm tra trong friendRequests của người kia)
+    if (me.friends && me.friends.includes(targetId)) return 'friend';
     const targetUser = store.users.find(u => u.id === targetId);
-    if (targetUser?.friendRequests?.includes(me.id)) {
-        return 'sent';
-    }
-
-    // 3. Họ đã gửi lời mời kết bạn cho mình
-    if (me.friendRequests?.includes(targetId)) {
-        return 'received';
-    }
-
-    // 4. Chưa có quan hệ gì
+    if (targetUser?.friendRequests?.includes(me.id)) return 'sent';
+    if (me.friendRequests?.includes(targetId)) return 'received';
     return 'none';
 };
 
-// ===== ACTION FUNCTIONS (Hàm xử lý sự kiện) =====
+// ===== COMPUTED =====
+const sortedPosts = computed(() => {
+    return [...store.posts].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+});
 
-/**
- * Gửi lời mời kết bạn cho một người dùng
- * @param {number} targetId - ID của người dùng muốn kết bạn
- */
+// ===== FUNCTIONS =====
 const sendFriendRequest = (targetId) => {
     const targetUser = store.users.find(u => u.id === targetId);
-    
-    // Kiểm tra user có tồn tại không
-    if (!targetUser) {
-        alert('Người dùng không tồn tại!');
-        return;
-    }
-    
-    // Khởi tạo mảng nếu chưa có
+    if (!targetUser) return;
     if (!targetUser.friendRequests) targetUser.friendRequests = [];
     if (!targetUser.notifications) targetUser.notifications = [];
-
-    // Thêm ID của mình vào danh sách lời mời của họ
     targetUser.friendRequests.push(store.currentUser.id);
-    
-    // Tạo thông báo cho người nhận
     targetUser.notifications.unshift({
         id: Date.now(),
         type: 'friend_request',
@@ -72,230 +53,113 @@ const sendFriendRequest = (targetId) => {
         timestamp: new Date().toISOString(),
         isRead: false
     });
-
-    // Lưu vào database (localStorage)
     store.saveDB();
     alert('Đã gửi lời mời kết bạn!');
 };
 
-/**
- * Bật/tắt ô nhập trả lời cho một comment
- * @param {number} parentId - ID của comment cha
- * @param {number|null} replyToUser - ID của user muốn reply (nếu có)
- */
 const toggleReplyInput = (parentId, replyToUser = null) => {
-    const stateKey = `show_${parentId}`;
-    
-    // Bật/tắt hiển thị ô nhập
-    replyState[stateKey] = !replyState[stateKey];
-    
-    // Nếu reply cho một người cụ thể, tự động điền @Tên
+    replyState[`show_${parentId}`] = !replyState[`show_${parentId}`];
     if (replyToUser) {
-        const name = getUserName(replyToUser);
-        replyState[parentId] = `@${name} `;
+        replyState[parentId] = `@${getUserName(replyToUser)} `;
     } else {
         replyState[parentId] = '';
     }
 };
 
-/**
- * Gửi trả lời cho một comment
- * @param {Object} post - Post chứa comment
- * @param {number} parentCommentId - ID của comment cha
- */
 const submitReply = (post, parentCommentId) => {
     const content = replyState[parentCommentId]?.trim();
-    
-    // Kiểm tra nội dung không rỗng
-    if (!content) {
-        alert('Vui lòng nhập nội dung trả lời!');
-        return;
+    if (!content) return;
+    const comment = post.comments.find(c => c.id === parentCommentId);
+    if (comment) {
+        if (!comment.replies) comment.replies = [];
+        comment.replies.push({
+            id: Date.now(),
+            userId: store.currentUser.id,
+            content: content,
+            timestamp: new Date().toISOString()
+        });
+        replyState[parentCommentId] = '';
+        store.saveDB();
     }
-
-    // Tìm comment cha
-    const parentComment = post.comments.find(c => c.id === parentCommentId);
-    if (!parentComment) {
-        alert('Không tìm thấy comment!');
-        return;
-    }
-    
-    // Khởi tạo mảng replies nếu chưa có
-    if (!parentComment.replies) {
-        parentComment.replies = [];
-    }
-    
-    // Thêm reply mới
-    parentComment.replies.push({
-        id: Date.now(), 
-        userId: store.currentUser.id, 
-        content: content, 
-        timestamp: new Date().toISOString()
-    });
-    
-    // Xóa nội dung trong ô nhập
-    replyState[parentCommentId] = '';
-    
-    // Lưu vào database
-    store.saveDB();
 };
 
-// ===== COMPUTED PROPERTIES (Tính toán tự động) =====
-
-/**
- * Sắp xếp bài viết theo thời gian (mới nhất lên đầu)
- */
-const sortedPosts = computed(() => {
-    return [...store.posts].sort((a, b) => {
-        return new Date(b.timestamp) - new Date(a.timestamp);
-    });
-});
-
-// ===== POST FUNCTIONS (Hàm xử lý bài viết) =====
-
-/**
- * Tạo bài viết mới
- */
 const createPost = () => {
     const content = newPost.content?.trim();
-    
-    // Validate: Bắt buộc phải có nội dung
     if (!content) {
         alert('Vui lòng nhập nội dung bài viết!');
         return;
     }
-    
-    // Validate URL hình ảnh nếu có
     if (newPost.image && !isValidImageUrl(newPost.image)) {
-        alert('URL hình ảnh không hợp lệ! Vui lòng nhập URL đầy đủ (bắt đầu bằng http:// hoặc https://)');
+        alert('URL hình ảnh không hợp lệ!');
         return;
     }
-    
-    // Tạo object bài viết mới
-    const post = {
-        id: Date.now(), 
+    store.posts.unshift({
+        id: Date.now(),
         userId: store.currentUser.id,
-        title: newPost.title?.trim() || 'Chia sẻ mới', 
-        content: content, 
-        image: newPost.image?.trim() || '', 
-        timestamp: new Date().toISOString(), 
-        comments: [], 
-        likes: [], 
-        shares: 0, 
+        title: newPost.title?.trim() || 'Chia sẻ mới',
+        content: content,
+        image: newPost.image?.trim() || '',
+        timestamp: new Date().toISOString(),
+        comments: [],
+        likes: [],
+        shares: 0,
         isEditing: false,
-        newComment: '' // Dùng để bind với input comment
-    };
-    
-    // Thêm vào đầu danh sách (mới nhất lên đầu)
-    store.posts.unshift(post);
-    
-    // Reset form
-    newPost.title = ''; 
-    newPost.content = ''; 
-    newPost.image = ''; 
+        newComment: ''
+    });
+    newPost.title = '';
+    newPost.content = '';
+    newPost.image = '';
     showImageInput.value = false;
-    
-    // Lưu vào database
-    store.saveDB();
-};
-/**
- * Like/Unlike một bài viết
- * @param {Object} post - Post cần like/unlike
- */
-const toggleLike = (post) => {
-    // Khởi tạo mảng likes nếu chưa có
-    if (!post.likes) {
-        post.likes = [];
-    }
-    
-    const userId = store.currentUser.id;
-    const likeIndex = post.likes.indexOf(userId);
-    
-    // Nếu đã like thì bỏ like, chưa like thì thêm like
-    if (likeIndex === -1) {
-        post.likes.push(userId);
-    } else {
-        post.likes.splice(likeIndex, 1);
-    }
-    
     store.saveDB();
 };
 
-/**
- * Chia sẻ một bài viết
- * @param {Object} post - Post cần chia sẻ
- */
-const handleShare = (post) => {
-    if (!post.shares) {
-        post.shares = 0;
+const toggleLike = (post) => {
+    if (!post.likes) post.likes = [];
+    const idx = post.likes.indexOf(store.currentUser.id);
+    if (idx === -1) {
+        post.likes.push(store.currentUser.id);
+    } else {
+        post.likes.splice(idx, 1);
     }
+    store.saveDB();
+};
+
+const handleShare = (post) => {
+    if (!post.shares) post.shares = 0;
     post.shares++;
     store.saveDB();
     alert('Đã chia sẻ!');
 };
 
-/**
- * Xóa một bài viết
- * @param {number} postId - ID của post cần xóa
- */
-const deletePost = (postId) => {
-    if (confirm('Bạn có chắc chắn muốn xóa bài viết này?')) {
-        store.posts = store.posts.filter(p => p.id !== postId);
+const deletePost = (id) => {
+    if (confirm('Xóa bài?')) {
+        store.posts = store.posts.filter(p => p.id !== id);
         store.saveDB();
     }
 };
 
-/**
- * Bật chế độ chỉnh sửa bài viết
- * @param {Object} post - Post cần chỉnh sửa
- */
 const editPost = (post) => {
     post.isEditing = true;
-    // Lưu giá trị cũ vào temp để có thể hủy
     post.tempTitle = post.title;
     post.tempContent = post.content;
 };
 
-/**
- * Lưu chỉnh sửa bài viết
- * @param {Object} post - Post đang chỉnh sửa
- */
 const saveEdit = (post) => {
-    const newTitle = post.tempTitle?.trim() || '';
     const newContent = post.tempContent?.trim();
-    
-    // Validate nội dung không được rỗng
     if (!newContent) {
-        alert('Nội dung bài viết không được để trống!');
+        alert('Nội dung không được để trống!');
         return;
     }
-    
-    // Cập nhật nội dung
-    post.title = newTitle || 'Chia sẻ mới';
+    post.title = post.tempTitle?.trim() || 'Chia sẻ mới';
     post.content = newContent;
     post.isEditing = false;
-    
     store.saveDB();
 };
 
-/**
- * Thêm bình luận vào bài viết
- * @param {Object} post - Post cần thêm comment
- */
 const addComment = (post) => {
     const content = post.newComment?.trim();
-    
-    // Validate nội dung không rỗng
-    if (!content) {
-        alert('Vui lòng nhập nội dung bình luận!');
-        return;
-    }
-    
-    // Khởi tạo mảng comments nếu chưa có
-    if (!post.comments) {
-        post.comments = [];
-    }
-    
-    // Thêm comment mới
+    if (!content) return;
+    if (!post.comments) post.comments = [];
     post.comments.push({
         id: Date.now(),
         userId: store.currentUser.id,
@@ -303,67 +167,36 @@ const addComment = (post) => {
         timestamp: new Date().toISOString(),
         replies: []
     });
-    
-    // Xóa nội dung trong ô nhập
     post.newComment = '';
-    
     store.saveDB();
 };
 
-// ===== MODAL FUNCTIONS (Hàm xử lý modal) =====
-
-/**
- * Mở modal hiển thị chi tiết bài viết
- * @param {Object} post - Post cần hiển thị
- */
 const openPostModal = (post) => {
-    // Copy post để không ảnh hưởng đến post gốc
     selectedPost.value = { ...post };
     showModal.value = true;
 };
 
-/**
- * Đóng modal
- */
 const closeModal = () => {
     showModal.value = false;
     selectedPost.value = null;
 };
 
-/**
- * Xử lý like trong modal (đồng bộ với post gốc)
- * @param {Object} post - Post được like
- */
 const handleModalLike = (post) => {
     toggleLike(post);
-    
-    // Đồng bộ selectedPost với post gốc trong store
     if (selectedPost.value?.id === post.id) {
         selectedPost.value.likes = [...post.likes];
     }
 };
 
-/**
- * Xử lý share trong modal (đồng bộ với post gốc)
- * @param {Object} post - Post được share
- */
 const handleModalShare = (post) => {
     handleShare(post);
-    
-    // Đồng bộ selectedPost với post gốc trong store
     if (selectedPost.value?.id === post.id) {
         selectedPost.value.shares = post.shares;
     }
 };
 
-/**
- * Xử lý thêm comment trong modal (đồng bộ với post gốc)
- * @param {Object} post - Post được comment
- */
 const handleModalAddComment = (post) => {
     addComment(post);
-    
-    // Đồng bộ selectedPost với post gốc trong store
     if (selectedPost.value?.id === post.id) {
         selectedPost.value.comments = [...post.comments];
     }
@@ -371,44 +204,42 @@ const handleModalAddComment = (post) => {
 </script>
 
 <template>
-    <div class="page-background">
-        <div class="container py-4">
+    <div class="py-4" style="background-color: #f0f2f5; min-height: 100vh; margin-top: -1.5rem;">
+        <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-8">
-                    
+                    <!-- Form tạo bài viết -->
                     <div class="card shadow border-0 mb-4 rounded-4">
                         <div class="card-body p-4">
                             <div class="d-flex align-items-center mb-3">
                                 <img :src="store.currentUser.avatar || store.defaultAvatar" class="rounded-circle border object-fit-cover me-2" width="45" height="45">
                                 <div>
                                     <h6 class="fw-bold mb-0 text-dark">{{ store.currentUser.name }}</h6>
-                                    <div class="badge bg-light text-secondary border rounded-pill px-2 py-1 mt-1 fw-normal" style="cursor: pointer; font-size: 11px;">
-                                        <i class="fas fa-globe-asia me-1"></i> Công khai <i class="fas fa-caret-down ms-1"></i>
+                                    <div class="badge bg-light text-secondary border rounded-pill px-2 py-1 mt-1 fw-normal" style="font-size: 11px;">
+                                        <i class="fas fa-globe-asia me-1"></i> Công khai
                                     </div>
                                 </div>
                             </div>
-
                             <div class="w-100">
                                 <input v-model="newPost.title" class="form-control border-0 fw-bold mb-2 px-0 shadow-none fs-5" placeholder="Tiêu đề bài viết (Không bắt buộc)...">
                                 <textarea v-model="newPost.content" class="form-control border-0 px-0 shadow-none fs-5" rows="3" :placeholder="`Chào ${store.currentUser.name}, bạn đang nghĩ gì thế?`" style="resize: none;"></textarea>
                             </div>
-                            
                             <div v-if="newPost.image" class="mb-3 position-relative mt-2">
                                 <img :src="newPost.image" class="img-fluid rounded-3 w-100 object-fit-cover" style="max-height: 300px;">
                                 <button @click="newPost.image = ''" class="btn btn-dark btn-sm position-absolute top-0 end-0 m-2 rounded-circle"><i class="fas fa-times"></i></button>
                             </div>
-                            
-                            <div v-if="showImageInput" class="mb-3 mt-2"><input v-model="newPost.image" class="form-control bg-light border-0 rounded-pill" placeholder="Dán URL hình ảnh..."></div>
-                            
+                            <div v-if="showImageInput" class="mb-3 mt-2">
+                                <input v-model="newPost.image" class="form-control bg-light border-0 rounded-pill" placeholder="Dán URL hình ảnh...">
+                            </div>
                             <hr class="text-muted opacity-25 my-2">
-                            
                             <div class="d-flex justify-content-between align-items-center mt-2">
-                                <button @click="showImageInput = !showImageInput" class="btn btn-light text-success rounded-pill me-2 fw-bold btn-sm-custom"><i class="fas fa-image me-1"></i> Ảnh/Video</button>
+                                <button @click="showImageInput = !showImageInput" class="btn btn-light text-success rounded-pill me-2 fw-bold"><i class="fas fa-image me-1"></i> Ảnh/Video</button>
                                 <button @click="createPost" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" :disabled="!newPost.content">Đăng bài</button>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Danh sách bài viết -->
                     <div v-for="post in sortedPosts" :key="post.id" class="card shadow-sm border-0 mb-4 rounded-4" style="cursor: pointer;" @click="openPostModal(post)">
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-between align-items-start">
@@ -417,26 +248,19 @@ const handleModalAddComment = (post) => {
                                     <div>
                                         <div class="fw-bold text-dark d-flex align-items-center">
                                             {{ getUserName(post.userId) }}
-                                            
                                             <div v-if="post.userId !== store.currentUser.id" class="ms-2">
-                                                <button v-if="getFriendStatus(post.userId) === 'none'" 
-                                                        @click="sendFriendRequest(post.userId)"
-                                                        class="btn btn-sm btn-primary py-0 px-3 rounded-pill fw-bold shadow-sm">
+                                                <button v-if="getFriendStatus(post.userId) === 'none'" @click.stop="sendFriendRequest(post.userId)" class="btn btn-sm btn-primary py-0 px-3 rounded-pill fw-bold shadow-sm">
                                                     <i class="fas fa-user-plus me-1"></i> Kết bạn
                                                 </button>
-
-                                                <button v-else-if="getFriendStatus(post.userId) === 'sent'" 
-                                                        class="btn btn-sm btn-secondary py-0 px-3 rounded-pill fw-bold disabled">
+                                                <button v-else-if="getFriendStatus(post.userId) === 'sent'" class="btn btn-sm btn-secondary py-0 px-3 rounded-pill fw-bold disabled">
                                                     <i class="fas fa-paper-plane me-1"></i> Đã gửi
                                                 </button>
-
-                                                <span v-else-if="getFriendStatus(post.userId) === 'friend'" 
-                                                      class="badge bg-light text-dark border fw-normal p-2 rounded-pill">
+                                                <span v-else-if="getFriendStatus(post.userId) === 'friend'" class="badge bg-light text-dark border fw-normal p-2 rounded-pill">
                                                     <i class="fas fa-check text-success"></i> Bạn bè
                                                 </span>
                                             </div>
                                         </div>
-                                        <small class="text-muted" style="font-size: 12px;">{{ formatDate(post.timestamp) }} <i class="fas fa-globe-asia ms-1"></i></small>
+                                        <small class="text-muted" style="font-size: 12px;">{{ formatDate(post.timestamp) }}</small>
                                     </div>
                                 </div>
                                 <div v-if="post.userId === store.currentUser.id" class="dropdown" @click.stop>
@@ -451,16 +275,23 @@ const handleModalAddComment = (post) => {
                             <div v-if="post.isEditing" @click.stop>
                                 <input v-model="post.tempTitle" class="form-control mb-2 fw-bold">
                                 <textarea v-model="post.tempContent" class="form-control mb-2" rows="3"></textarea>
-                                <div class="d-flex justify-content-end"><button @click.stop="saveEdit(post)" class="btn btn-success btn-sm me-2">Lưu</button><button @click.stop="post.isEditing = false" class="btn btn-secondary btn-sm">Hủy</button></div>
+                                <div class="d-flex justify-content-end">
+                                    <button @click.stop="saveEdit(post)" class="btn btn-success btn-sm me-2">Lưu</button>
+                                    <button @click.stop="post.isEditing = false" class="btn btn-secondary btn-sm">Hủy</button>
+                                </div>
                             </div>
                             <div v-else>
                                 <h5 v-if="post.title !== 'Chia sẻ mới'" class="card-title fw-bold mb-2">{{ post.title }}</h5>
                                 <p class="card-text mb-3" style="white-space: pre-line;">{{ post.content }}</p>
-                                <div v-if="post.image" class="rounded-3 overflow-hidden mb-3 bg-light border d-flex justify-content-center"><img :src="post.image" class="img-fluid" style="max-height: 500px;"></div>
+                                <div v-if="post.image" class="rounded-3 overflow-hidden mb-3 bg-light border d-flex justify-content-center">
+                                    <img :src="post.image" class="img-fluid" style="max-height: 500px;">
+                                </div>
                             </div>
 
                             <div class="d-flex justify-content-between text-muted border-top border-bottom py-2 my-3" @click.stop>
-                                <button @click.stop="toggleLike(post)" class="btn flex-grow-1 border-0 fw-bold" :class="post.likes && post.likes.includes(store.currentUser.id) ? 'text-primary' : 'text-muted'"><i class="fas fa-thumbs-up me-2"></i>{{ post.likes?.length || '' }} Thích</button>
+                                <button @click.stop="toggleLike(post)" class="btn flex-grow-1 border-0 fw-bold" :class="post.likes && post.likes.includes(store.currentUser.id) ? 'text-primary' : 'text-muted'">
+                                    <i class="fas fa-thumbs-up me-2"></i>{{ post.likes?.length || '' }} Thích
+                                </button>
                                 <button class="btn btn-light flex-grow-1 border-0 text-muted fw-bold"><i class="far fa-comment-alt me-2"></i>Bình luận</button>
                                 <button @click.stop="handleShare(post)" class="btn btn-light flex-grow-1 border-0 text-muted fw-bold"><i class="fas fa-share me-2"></i>{{ post.shares || '' }} Chia sẻ</button>
                             </div>
@@ -475,12 +306,11 @@ const handleModalAddComment = (post) => {
                                                 <span style="font-size: 0.95rem;">{{ cmt.content }}</span>
                                             </div>
                                             <div class="mt-1 ms-1">
-                                                <small @click="toggleReplyInput(cmt.id)" class="text-muted fw-bold me-3" style="font-size: 12px; cursor: pointer;" @mouseenter="$event.target.style.textDecoration='underline'" @mouseleave="$event.target.style.textDecoration='none'">Trả lời</small>
+                                                <small @click="toggleReplyInput(cmt.id)" class="text-muted fw-bold me-3" style="font-size: 12px; cursor: pointer;">Trả lời</small>
                                                 <small class="text-muted" style="font-size: 11px;">{{ formatDate(cmt.timestamp) }}</small>
                                             </div>
                                         </div>
                                     </div>
-
                                     <div v-if="cmt.replies && cmt.replies.length > 0" class="ms-5 mt-2 ps-2 border-start border-3">
                                         <div v-for="reply in cmt.replies" :key="reply.id" class="d-flex mb-2">
                                             <img :src="getUserAvatar(reply.userId)" class="rounded-circle me-2 object-fit-cover mt-1" width="24" height="24">
@@ -490,12 +320,11 @@ const handleModalAddComment = (post) => {
                                                     <span style="font-size: 0.9rem;">{{ reply.content }}</span>
                                                 </div>
                                                 <div class="mt-1 ms-1">
-                                                    <small @click="toggleReplyInput(cmt.id, reply.userId)" class="text-muted fw-bold" style="font-size: 11px; cursor: pointer;" @mouseenter="$event.target.style.textDecoration='underline'" @mouseleave="$event.target.style.textDecoration='none'">Trả lời</small>
+                                                    <small @click="toggleReplyInput(cmt.id, reply.userId)" class="text-muted fw-bold" style="font-size: 11px; cursor: pointer;">Trả lời</small>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
                                     <div v-if="replyState[`show_${cmt.id}`]" class="d-flex mt-2 ms-5 align-items-center">
                                         <img :src="store.currentUser.avatar || store.defaultAvatar" class="rounded-circle me-2 object-fit-cover" width="24" height="24">
                                         <div class="input-group input-group-sm">
@@ -504,7 +333,6 @@ const handleModalAddComment = (post) => {
                                         </div>
                                     </div>
                                 </div>
-
                                 <div class="d-flex mt-3 align-items-center">
                                     <img :src="store.currentUser.avatar || store.defaultAvatar" class="rounded-circle me-2 object-fit-cover" width="32" height="32">
                                     <div class="input-group">
@@ -519,18 +347,7 @@ const handleModalAddComment = (post) => {
             </div>
         </div>
 
-        <!-- Post Modal -->
-        <PostModal 
-            :post="selectedPost" 
-            :show="showModal"
-            @close="closeModal"
-            @like="handleModalLike"
-            @share="handleModalShare"
-            @add-comment="handleModalAddComment"
-        />
+        <PostModal :post="selectedPost" :show="showModal" @close="closeModal" @like="handleModalLike" @share="handleModalShare" @add-comment="handleModalAddComment" />
     </div>
 </template>
 
-<style scoped>
-/* Chỉ dùng Bootstrap - không có custom styles */
-</style>
